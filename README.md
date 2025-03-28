@@ -36,15 +36,6 @@ All Python dependencies are managed through Poetry and include:
 - SciPy
 - Jupyter
 
-## Code Quality
-
-The project follows strict code quality guidelines:
-- No unused imports or dependencies
-- Organized imports (standard library first, third-party second)
-- Pure functions with no side effects
-- Clear separation of concerns
-- Explicit dependencies
-
 ## Setup
 
 ### Installing Dependencies
