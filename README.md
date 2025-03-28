@@ -21,15 +21,29 @@ The goal is to analyze the trade-off between computation time and variance reduc
 
 - `final_project.qmd`: Main Quarto document containing the implementation, analysis, and results
 - `Makefile`: Contains commands for rendering the document and other project tasks
+- `pyproject.toml` & `poetry.lock`: Poetry configuration for dependency management
 
 ## Requirements
 
 - Python 3.8+
+- Poetry (for dependency management)
+- Quarto
+
+All Python dependencies are managed through Poetry and include:
 - NumPy
 - Pandas
 - Matplotlib
 - SciPy
-- Quarto
+- Jupyter
+
+## Setup
+
+### Installing Dependencies
+
+```bash
+# Install Poetry dependencies
+poetry install
+```
 
 ## Usage
 
@@ -39,6 +53,14 @@ To render the Quarto document to HTML:
 
 ```bash
 make render
+```
+
+### Viewing the Document
+
+To open the rendered HTML file in your default browser:
+
+```bash
+make view
 ```
 
 ### Running the Project
