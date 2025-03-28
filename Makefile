@@ -4,7 +4,7 @@
 # Variables
 QUARTO_FILE = final_project.qmd
 HTML_OUTPUT = final_project.html
-PYTHON = python3
+POETRY = poetry
 
 # Default target
 .PHONY: all
@@ -14,13 +14,19 @@ all: render
 .PHONY: render
 render:
 	@echo "Rendering $(QUARTO_FILE) to HTML..."
-	quarto render $(QUARTO_FILE)
+	$(POETRY) run quarto render $(QUARTO_FILE)
 	@echo "Done! Output saved to $(HTML_OUTPUT)"
+
+# View the rendered HTML file in the default browser
+.PHONY: view
+view:
+	@echo "Opening $(HTML_OUTPUT) in browser..."
+	open $(HTML_OUTPUT)
 
 # Run the project as a module
 .PHONY: run
 run:
-	$(PYTHON) -m final_project
+	$(POETRY) run python -m final_project
 
 # Clean generated files
 .PHONY: clean
@@ -37,6 +43,7 @@ help:
 	@echo "Available targets:"
 	@echo "  make          - Render the Quarto document to HTML"
 	@echo "  make render   - Same as above"
+	@echo "  make view     - Open the rendered HTML file in browser"
 	@echo "  make run      - Run the project as a Python module"
 	@echo "  make clean    - Remove generated files"
 	@echo "  make help     - Show this help message"
