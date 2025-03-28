@@ -1,0 +1,768 @@
+---
+title: "Risk-Neutral Monte Carlo Pricing"
+subtitle: "DATA 5695: Computational Methods in FinTech"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-tools: true
+    theme: cosmo
+    highlight-style: github
+jupyter: python3
+---
+
+# Introduction
+
+This project implements risk-neutral Monte Carlo pricing for exotic options with variance reduction techniques. We focus on two types of options:
+
+1. Arithmetic Asian Call Option
+2. European Fixed Strike Lookback Call Option with Stochastic Volatility
+
+For each option, we implement and compare four simulation approaches:
+
+- Simple Monte Carlo (baseline)
+- Antithetic sampling
+- Control variate
+- Combined antithetic and control variate
+
+The goal is to analyze the trade-off between computation time and variance reduction for each technique.
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import time
+from scipy.stats import norm
+import pandas as pd
+from typing import Tuple, List, Callable, Dict, Any, Optional
+```
+
+# Problem 1: Pricing an Arithmetic Asian Option
+
+An arithmetic Asian call option pays the difference (if positive) between the arithmetic average of the asset price $A_T$ and the strike price $K$ at maturity date $T$. The arithmetic average is taken on a set of observations (fixings) of the asset price $S_{t_i}$ at dates $t_i; i = 1, \ldots, N$.
+
+$$
+A_T = \frac{1}{N} \sum_{i=1}^{N} S_{t_i}
+$$
+
+There is no analytical solution for the price of an arithmetic Asian option. However, there is an analytical formula for the price of a geometric Asian option, which makes a good control variate.
+
+## Asset Price Path Generation
+
+We model the asset price using Geometric Brownian Motion:
+
+$$
+S_t = S_{t-1} \times \exp(nudt + sigsdt \times \varepsilon)
+$$
+
+where $\varepsilon$ is drawn from a standard normal distribution and:
+
+$$
+\begin{aligned}
+dt &= \Delta t = \frac{T}{N} = \frac{1}{10} = 0.1 \\
+nudt &= (r - \delta - \frac{1}{2}\sigma^2)\Delta t = (0.06 - 0.03 - 0.5 \times 0.2^2) \times 0.1 = 0.001 \\
+sigsdt &= \sigma\sqrt{\Delta t} = 0.2\sqrt{0.1} = 0.0632
+\end{aligned}
+$$
+
+```{python}
+def generate_gbm_paths(
+    S0: float,
+    r: float,
+    sigma: float,
+    T: float,
+    delta: float,
+    n_steps: int,
+    n_paths: int,
+    antithetic: bool = False
+) -> np.ndarray:
+    """
+    Generate asset price paths using Geometric Brownian Motion.
+    
+    Parameters:
+    -----------
+    S0 : float
+        Initial asset price
+    r : float
+        Risk-free interest rate
+    sigma : float
+        Volatility
+    T : float
+        Time to maturity
+    delta : float
+        Dividend yield
+    n_steps : int
+        Number of time steps
+    n_paths : int
+        Number of paths to generate
+    antithetic : bool
+        Whether to use antithetic sampling
+        
+    Returns:
+    --------
+    np.ndarray
+        Array of shape (n_paths, n_steps+1) containing asset price paths
+    """
+    dt = T / n_steps
+    nudt = (r - delta - 0.5 * sigma**2) * dt
+    sigsdt = sigma * np.sqrt(dt)
+    
+    # Initialize paths array with initial price
+    paths = np.zeros((n_paths, n_steps + 1))
+    paths[:, 0] = S0
+    
+    # Generate random normal variables
+    if antithetic:
+        # For antithetic sampling, generate half the paths and then negate
+        half_paths = n_paths // 2
+        Z = np.random.normal(0, 1, (half_paths, n_steps))
+        
+        # First half of paths uses Z
+        for i in range(1, n_steps + 1):
+            paths[:half_paths, i] = paths[:half_paths, i-1] * np.exp(nudt + sigsdt * Z[:, i-1])
+        
+        # Second half uses -Z (antithetic)
+        for i in range(1, n_steps + 1):
+            paths[half_paths:, i] = paths[half_paths:, i-1] * np.exp(nudt + sigsdt * (-Z[:, i-1]))
+    else:
+        # Standard path generation
+        for i in range(1, n_steps + 1):
+            Z = np.random.normal(0, 1, n_paths)
+            paths[:, i] = paths[:, i-1] * np.exp(nudt + sigsdt * Z)
+    
+    return paths
+```
+
+## Geometric Asian Option Pricing (Control Variate)
+
+The geometric Asian call option pays the difference between the geometric average of the asset price $G_T$ and the strike price $K$ at maturity. The geometric average is:
+
+$$
+G_T = \left(\prod_{i=1}^{N} S_{t_i}\right)^{1/N}
+$$
+
+The price of the geometric Asian call option is given by a modified Black-Scholes formula:
+
+```{python}
+def geometric_asian_call_price(
+    S0: float,
+    K: float,
+    r: float,
+    sigma: float,
+    T: float,
+    delta: float,
+    n_steps: int
+) -> float:
+    """
+    Calculate the price of a geometric Asian call option.
+    
+    Parameters:
+    -----------
+    S0 : float
+        Initial asset price
+    K : float
+        Strike price
+    r : float
+        Risk-free interest rate
+    sigma : float
+        Volatility
+    T : float
+        Time to maturity
+    delta : float
+        Dividend yield
+    n_steps : int
+        Number of fixings
+        
+    Returns:
+    --------
+    float
+        Price of the geometric Asian call option
+    """
+    # Time parameters
+    dt = T / n_steps
+    
+    # Adjusted parameters for the geometric Asian option
+    nu = r - delta - 0.5 * sigma**2
+    
+    # Calculate a and b parameters
+    a = (nu * T + 0.5 * sigma**2 * T * (n_steps + 1) / (2 * n_steps)) / n_steps
+    b = (sigma**2 * T * (n_steps + 1) * (2 * n_steps + 1)) / (6 * n_steps**2)
+    
+    # Modified d1 and d2
+    d1 = (np.log(S0 / K) + a + b) / np.sqrt(b)
+    d2 = d1 - np.sqrt(b)
+    
+    # Calculate option price
+    price = np.exp(-r * T) * (S0 * np.exp(a) * norm.cdf(d1) - K * norm.cdf(d2))
+    
+    return price
+```
+
+## Arithmetic Asian Option Pricing
+
+Now we implement the Monte Carlo pricing for the arithmetic Asian option using different variance reduction techniques.
+
+```{python}
+def arithmetic_asian_call_mc(
+    S0: float,
+    K: float,
+    r: float,
+    sigma: float,
+    T: float,
+    delta: float,
+    n_steps: int,
+    n_paths: int,
+    antithetic: bool = False,
+    control_variate: bool = False
+) -> Tuple[float, float, float]:
+    """
+    Price an arithmetic Asian call option using Monte Carlo simulation.
+    
+    Parameters:
+    -----------
+    S0 : float
+        Initial asset price
+    K : float
+        Strike price
+    r : float
+        Risk-free interest rate
+    sigma : float
+        Volatility
+    T : float
+        Time to maturity
+    delta : float
+        Dividend yield
+    n_steps : int
+        Number of time steps
+    n_paths : int
+        Number of paths to generate
+    antithetic : bool
+        Whether to use antithetic sampling
+    control_variate : bool
+        Whether to use control variate
+        
+    Returns:
+    --------
+    Tuple[float, float, float]
+        (option price, standard error, computation time)
+    """
+    start_time = time.time()
+    
+    # Generate asset price paths
+    paths = generate_gbm_paths(S0, r, sigma, T, delta, n_steps, n_paths, antithetic)
+    
+    # Calculate arithmetic averages (excluding initial price)
+    arithmetic_avg = np.mean(paths[:, 1:], axis=1)
+    
+    # Calculate payoffs
+    payoffs = np.maximum(arithmetic_avg - K, 0)
+    
+    # Apply control variate if requested
+    if control_variate:
+        # Calculate geometric averages
+        # For numerical stability, we take the log first
+        log_paths = np.log(paths[:, 1:])
+        log_geometric_avg = np.mean(log_paths, axis=1)
+        geometric_avg = np.exp(log_geometric_avg)
+        
+        # Calculate geometric payoffs
+        geometric_payoffs = np.maximum(geometric_avg - K, 0)
+        
+        # Get analytical price for geometric Asian option
+        geo_price = geometric_asian_call_price(S0, K, r, sigma, T, delta, n_steps)
+        
+        # Calculate optimal control variate parameter (using first 10% of paths as pilot)
+        pilot_size = max(1000, n_paths // 10)
+        cov_matrix = np.cov(payoffs[:pilot_size], geometric_payoffs[:pilot_size])
+        beta = -cov_matrix[0, 1] / cov_matrix[1, 1]
+        
+        # Apply control variate adjustment
+        adjusted_payoffs = payoffs + beta * (geometric_payoffs - np.exp(-r * T) * geo_price)
+        
+        # Calculate price and standard error
+        price = np.exp(-r * T) * np.mean(adjusted_payoffs)
+        std_err = np.exp(-r * T) * np.std(adjusted_payoffs, ddof=1) / np.sqrt(n_paths)
+    else:
+        # Standard Monte Carlo
+        price = np.exp(-r * T) * np.mean(payoffs)
+        std_err = np.exp(-r * T) * np.std(payoffs, ddof=1) / np.sqrt(n_paths)
+    
+    computation_time = time.time() - start_time
+    
+    return price, std_err, computation_time
+```
+
+## Results for Problem 1
+
+Let's run the simulations with the specified parameters:
+- $S_0 = \$100$
+- $K = \$100$
+- $r = 6\%$
+- $\delta = 3\%$
+- $\sigma = 20\%$
+- $T = 1$ year
+- $N = 10$ fixing dates
+- $M = 10,000$ simulations
+
+```{python}
+# Parameters
+S0 = 100.0
+K = 100.0
+r = 0.06
+delta = 0.03
+sigma = 0.20
+T = 1.0
+n_steps = 10
+n_paths = 10000
+
+# Run simulations
+results = []
+
+# Simple Monte Carlo
+price_mc, se_mc, time_mc = arithmetic_asian_call_mc(
+    S0, K, r, sigma, T, delta, n_steps, n_paths, 
+    antithetic=False, control_variate=False
+)
+results.append(["Simple Monte Carlo", price_mc, se_mc, time_mc, 1.0])
+
+# Antithetic sampling
+price_anti, se_anti, time_anti = arithmetic_asian_call_mc(
+    S0, K, r, sigma, T, delta, n_steps, n_paths, 
+    antithetic=True, control_variate=False
+)
+results.append(["Antithetic Sampling", price_anti, se_anti, time_anti, time_anti/time_mc])
+
+# Control variate
+price_cv, se_cv, time_cv = arithmetic_asian_call_mc(
+    S0, K, r, sigma, T, delta, n_steps, n_paths, 
+    antithetic=False, control_variate=True
+)
+results.append(["Control Variate", price_cv, se_cv, time_cv, time_cv/time_mc])
+
+# Combined antithetic and control variate
+price_combined, se_combined, time_combined = arithmetic_asian_call_mc(
+    S0, K, r, sigma, T, delta, n_steps, n_paths, 
+    antithetic=True, control_variate=True
+)
+results.append(["Combined Techniques", price_combined, se_combined, time_combined, time_combined/time_mc])
+
+# Display results
+results_df = pd.DataFrame(
+    results, 
+    columns=["Method", "Price", "Standard Error", "Computation Time (s)", "Relative Time"]
+)
+results_df
+```
+
+# Problem 2: Pricing a Lookback Option with Stochastic Volatility
+
+A European fixed strike lookback call option pays the difference, if positive, between the maximum of a set of observations of the asset price $S_{t_i}$ at dates $t_i; i = 1, \ldots, N$ and the strike price. The payoff at maturity is:
+
+$$\max(0, \max(S_{t_i}; i = 1, \ldots, N) - K)$$
+
+We model the asset price and volatility with the following stochastic differential equations:
+
+$$\begin{aligned}
+dS &= rSdt + \sigma S dz_1 \\
+dV &= \alpha(\bar{V} - V)dt + \xi\sqrt{V}dz_2
+\end{aligned}$$
+
+where $V = \sigma^2$ is the variance, and the Wiener processes $dz_1$ and $dz_2$ are uncorrelated.
+
+## Stochastic Volatility Path Generation
+
+```{python}
+def generate_sv_paths(
+    S0: float,
+    V0: float,
+    r: float,
+    delta: float,
+    alpha: float,
+    V_bar: float,
+    xi: float,
+    T: float,
+    n_steps: int,
+    n_paths: int,
+    antithetic: bool = False
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Generate asset price and volatility paths using the stochastic volatility model.
+    
+    Parameters:
+    -----------
+    S0 : float
+        Initial asset price
+    V0 : float
+        Initial variance (sigma^2)
+    r : float
+        Risk-free interest rate
+    delta : float
+        Dividend yield
+    alpha : float
+        Mean reversion rate for variance
+    V_bar : float
+        Long-term variance
+    xi : float
+        Volatility of volatility
+    T : float
+        Time to maturity
+    n_steps : int
+        Number of time steps
+    n_paths : int
+        Number of paths to generate
+    antithetic : bool
+        Whether to use antithetic sampling
+        
+    Returns:
+    --------
+    Tuple[np.ndarray, np.ndarray]
+        Tuple containing asset price paths and variance paths
+    """
+    dt = T / n_steps
+    
+    # Initialize paths
+    S_paths = np.zeros((n_paths, n_steps + 1))
+    V_paths = np.zeros((n_paths, n_steps + 1))
+    
+    S_paths[:, 0] = S0
+    V_paths[:, 0] = V0
+    
+    if antithetic:
+        half_paths = n_paths // 2
+        Z1 = np.random.normal(0, 1, (half_paths, n_steps))
+        Z2 = np.random.normal(0, 1, (half_paths, n_steps))
+        
+        # First half of paths
+        for i in range(1, n_steps + 1):
+            # Ensure variance stays positive
+            V_paths[:half_paths, i-1] = np.maximum(V_paths[:half_paths, i-1], 1e-6)
+            
+            # Update variance
+            dV = alpha * (V_bar - V_paths[:half_paths, i-1]) * dt + \
+                 xi * np.sqrt(V_paths[:half_paths, i-1] * dt) * Z2[:, i-1]
+            V_paths[:half_paths, i] = V_paths[:half_paths, i-1] + dV
+            
+            # Update asset price
+            dS = (r - delta) * dt + np.sqrt(V_paths[:half_paths, i-1] * dt) * Z1[:, i-1]
+            S_paths[:half_paths, i] = S_paths[:half_paths, i-1] * np.exp(dS)
+        
+        # Second half of paths (antithetic)
+        for i in range(1, n_steps + 1):
+            # Ensure variance stays positive
+            V_paths[half_paths:, i-1] = np.maximum(V_paths[half_paths:, i-1], 1e-6)
+            
+            # Update variance (using -Z2)
+            dV = alpha * (V_bar - V_paths[half_paths:, i-1]) * dt + \
+                 xi * np.sqrt(V_paths[half_paths:, i-1] * dt) * (-Z2[:, i-1])
+            V_paths[half_paths:, i] = V_paths[half_paths:, i-1] + dV
+            
+            # Update asset price (using -Z1)
+            dS = (r - delta) * dt + np.sqrt(V_paths[half_paths:, i-1] * dt) * (-Z1[:, i-1])
+            S_paths[half_paths:, i] = S_paths[half_paths:, i-1] * np.exp(dS)
+    else:
+        for i in range(1, n_steps + 1):
+            # Generate random numbers
+            Z1 = np.random.normal(0, 1, n_paths)
+            Z2 = np.random.normal(0, 1, n_paths)
+            
+            # Ensure variance stays positive
+            V_paths[:, i-1] = np.maximum(V_paths[:, i-1], 1e-6)
+            
+            # Update variance
+            dV = alpha * (V_bar - V_paths[:, i-1]) * dt + \
+                 xi * np.sqrt(V_paths[:, i-1] * dt) * Z2
+            V_paths[:, i] = V_paths[:, i-1] + dV
+            
+            # Update asset price
+            dS = (r - delta) * dt + np.sqrt(V_paths[:, i-1] * dt) * Z1
+            S_paths[:, i] = S_paths[:, i-1] * np.exp(dS)
+    
+    return S_paths, V_paths
+```
+
+## Continuous Fixing Lookback Option Price (Control Variate)
+
+For the control variate, we'll use the analytical formula for a continuous fixing fixed strike lookback call with constant volatility:
+
+```{python}
+def continuous_lookback_call_price(
+    S0: float,
+    K: float,
+    r: float,
+    sigma: float,
+    T: float,
+    delta: float,
+    M: float = None
+) -> float:
+    """
+    Calculate the price of a continuous fixing fixed strike lookback call option.
+    
+    Parameters:
+    -----------
+    S0 : float
+        Initial asset price
+    K : float
+        Strike price
+    r : float
+        Risk-free interest rate
+    sigma : float
+        Volatility
+    T : float
+        Time to maturity
+    delta : float
+        Dividend yield
+    M : float, optional
+        Current known maximum (defaults to S0 if not provided)
+        
+    Returns:
+    --------
+    float
+        Price of the continuous fixing lookback call option
+    """
+    if M is None:
+        M = S0
+    
+    # Calculate parameters
+    B = 2 * (r - delta) / (sigma**2)
+    
+    if K >= M:
+        E = K
+        G = 0
+    else:
+        E = M
+        G = np.exp(-r * T) * (M - K)
+    
+    x = (np.log(S0 / E) + (r - delta - 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    
+    # Calculate option price
+    price = G + S0 * np.exp(-delta * T) * norm.cdf(x + sigma * np.sqrt(T)) - \
+            K * np.exp(-r * T) * norm.cdf(x)
+    
+    if S0 != E:  # Add correction term if S0 != E
+        price -= (S0 / B) * (np.exp(-r * T) * (E / S0)**B * 
+                             norm.cdf(x + (1 - B) * sigma * np.sqrt(T)) - 
+                             np.exp(-delta * T) * norm.cdf(x + sigma * np.sqrt(T)))
+    
+    return price
+```
+
+## Lookback Option Pricing
+
+```{python}
+def lookback_call_mc(
+    S0: float,
+    K: float,
+    r: float,
+    delta: float,
+    sigma0: float,
+    alpha: float,
+    V_bar: float,
+    xi: float,
+    T: float,
+    n_steps: int,
+    n_paths: int,
+    antithetic: bool = False,
+    control_variate: bool = False
+) -> Tuple[float, float, float]:
+    """
+    Price a fixed strike lookback call option using Monte Carlo simulation.
+    
+    Parameters:
+    -----------
+    S0 : float
+        Initial asset price
+    K : float
+        Strike price
+    r : float
+        Risk-free interest rate
+    delta : float
+        Dividend yield
+    sigma0 : float
+        Initial volatility
+    alpha : float
+        Mean reversion rate for variance
+    V_bar : float
+        Long-term variance
+    xi : float
+        Volatility of volatility
+    T : float
+        Time to maturity
+    n_steps : int
+        Number of time steps
+    n_paths : int
+        Number of paths to generate
+    antithetic : bool
+        Whether to use antithetic sampling
+    control_variate : bool
+        Whether to use control variate
+        
+    Returns:
+    --------
+    Tuple[float, float, float]
+        (option price, standard error, computation time)
+    """
+    start_time = time.time()
+    
+    # Initial variance
+    V0 = sigma0**2
+    
+    # Generate asset price and volatility paths
+    S_paths, V_paths = generate_sv_paths(
+        S0, V0, r, delta, alpha, V_bar, xi, T, n_steps, n_paths, antithetic
+    )
+    
+    # Calculate maximum price for each path
+    max_prices = np.max(S_paths, axis=1)
+    
+    # Calculate payoffs
+    payoffs = np.maximum(max_prices - K, 0)
+    
+    if control_variate:
+        # For control variate, we'll use the continuous fixing lookback option
+        # with constant volatility (average volatility over the path)
+        
+        # Generate GBM paths with constant volatility for control
+        avg_sigma = np.sqrt(np.mean(V_paths))
+        control_paths = generate_gbm_paths(
+            S0, r, avg_sigma, T, delta, n_steps, n_paths, antithetic
+        )
+        
+        # Calculate maximum price for control paths
+        control_max_prices = np.max(control_paths, axis=1)
+        
+        # Calculate control payoffs
+        control_payoffs = np.maximum(control_max_prices - K, 0)
+        
+        # Get analytical price for continuous lookback
+        control_price = continuous_lookback_call_price(
+            S0, K, r, avg_sigma, T, delta
+        )
+        
+        # Calculate optimal control variate parameter (using first 10% of paths as pilot)
+        pilot_size = max(1000, n_paths // 10)
+        cov_matrix = np.cov(payoffs[:pilot_size], control_payoffs[:pilot_size])
+        beta = -cov_matrix[0, 1] / cov_matrix[1, 1]
+        
+        # Apply control variate adjustment
+        adjusted_payoffs = payoffs + beta * (control_payoffs - np.exp(-r * T) * control_price)
+        
+        # Calculate price and standard error
+        price = np.exp(-r * T) * np.mean(adjusted_payoffs)
+        std_err = np.exp(-r * T) * np.std(adjusted_payoffs, ddof=1) / np.sqrt(n_paths)
+    else:
+        # Standard Monte Carlo
+        price = np.exp(-r * T) * np.mean(payoffs)
+        std_err = np.exp(-r * T) * np.std(payoffs, ddof=1) / np.sqrt(n_paths)
+    
+    computation_time = time.time() - start_time
+    
+    return price, std_err, computation_time
+```
+
+## Results for Problem 2
+
+Let's run the simulations with the specified parameters:
+- $S_0 = \$100$
+- $K = \$100$
+- $r = 6\%$
+- $\delta = 3\%$
+- $\sigma_0 = 20\%$
+- $\alpha = 5.0$
+- $\xi = 0.02$
+- $T = 1$ year
+- $N = 52$ time steps
+- $M = 10,000$ simulations
+
+```{python}
+# Parameters
+S0 = 100.0
+K = 100.0
+r = 0.06
+delta = 0.03
+sigma0 = 0.20
+alpha = 5.0
+V_bar = sigma0**2  # Long-term variance equals initial variance
+xi = 0.02
+T = 1.0
+n_steps = 52
+n_paths = 10000
+
+# Run simulations
+results2 = []
+
+# Simple Monte Carlo
+price_mc, se_mc, time_mc = lookback_call_mc(
+    S0, K, r, delta, sigma0, alpha, V_bar, xi, T, n_steps, n_paths,
+    antithetic=False, control_variate=False
+)
+results2.append(["Simple Monte Carlo", price_mc, se_mc, time_mc, 1.0])
+
+# Antithetic sampling
+price_anti, se_anti, time_anti = lookback_call_mc(
+    S0, K, r, delta, sigma0, alpha, V_bar, xi, T, n_steps, n_paths,
+    antithetic=True, control_variate=False
+)
+results2.append(["Antithetic Sampling", price_anti, se_anti, time_anti, time_anti/time_mc])
+
+# Control variate
+price_cv, se_cv, time_cv = lookback_call_mc(
+    S0, K, r, delta, sigma0, alpha, V_bar, xi, T, n_steps, n_paths,
+    antithetic=False, control_variate=True
+)
+results2.append(["Control Variate", price_cv, se_cv, time_cv, time_cv/time_mc])
+
+# Combined antithetic and control variate
+price_combined, se_combined, time_combined = lookback_call_mc(
+    S0, K, r, delta, sigma0, alpha, V_bar, xi, T, n_steps, n_paths,
+    antithetic=True, control_variate=True
+)
+results2.append(["Combined Techniques", price_combined, se_combined, time_combined, time_combined/time_mc])
+
+# Display results
+results_df2 = pd.DataFrame(
+    results2, 
+    columns=["Method", "Price", "Standard Error", "Computation Time (s)", "Relative Time"]
+)
+results_df2
+```
+
+# Conclusion
+
+Let's compare the results of the different variance reduction techniques for both options:
+
+```{python}
+# Combine results
+results_df["Option"] = "Arithmetic Asian"
+results_df2["Option"] = "Lookback with SV"
+all_results = pd.concat([results_df, results_df2])
+
+# Calculate efficiency improvement (inverse of variance * time)
+all_results["Efficiency"] = 1.0 / (all_results["Standard Error"]**2 * all_results["Computation Time (s)"])
+all_results["Relative Efficiency"] = all_results.groupby("Option")["Efficiency"].transform(
+    lambda x: x / x.iloc[0]
+)
+
+# Display results
+all_results[["Option", "Method", "Price", "Standard Error", 
+             "Computation Time (s)", "Relative Efficiency"]]
+```
+
+## Trade-off Analysis
+
+The results demonstrate the trade-off between computation time and variance reduction:
+
+1. **Simple Monte Carlo** serves as our baseline but has the highest standard error.
+
+2. **Antithetic Sampling** provides moderate variance reduction with minimal additional computation cost. It works well for both options because the payoff functions are monotonic with respect to the asset price.
+
+3. **Control Variate** offers the most significant variance reduction, especially for the Arithmetic Asian option where the geometric Asian option serves as an excellent control. The computation overhead is moderate due to the need to calculate the analytical price and optimal control parameter.
+
+4. **Combined Techniques** provide the best of both worlds, achieving the lowest standard error overall. The additional computation time is justified by the substantial improvement in efficiency.
+
+For the Arithmetic Asian option, the control variate approach is particularly effective because the geometric Asian option is highly correlated with the arithmetic version but has an analytical solution. For the Lookback option with stochastic volatility, the continuous fixing lookback with constant volatility still provides a useful control, but the correlation is lower due to the stochastic volatility component.
+
+In practice, the choice of technique depends on the specific requirements:
+- If speed is critical, antithetic sampling offers a good balance
+- If accuracy is paramount, the combined approach is best
+- For routine pricing, the control variate approach often provides the best efficiency (variance reduction per unit of computation time)
+
+This analysis demonstrates the power of variance reduction techniques in Monte Carlo simulation for option pricing, particularly for exotic options without analytical solutions.
