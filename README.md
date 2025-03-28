@@ -107,7 +107,3 @@ The project includes a detailed analysis of the performance of each variance red
 - Standard error
 - Computation time
 - Efficiency (variance reduction per unit of computation time)
-
-## License
-
-MIT
