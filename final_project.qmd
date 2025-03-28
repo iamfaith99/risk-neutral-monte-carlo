@@ -28,12 +28,14 @@ For each option, we implement and compare four simulation approaches:
 The goal is to analyze the trade-off between computation time and variance reduction for each technique.
 
 ```{python}
-import numpy as np
-import matplotlib.pyplot as plt
+# Standard library imports
 import time
-from scipy.stats import norm
+from typing import Tuple
+
+# Third-party imports
+import numpy as np
 import pandas as pd
-from typing import Tuple, List, Callable, Dict, Any, Optional
+from scipy.stats import norm
 ```
 
 # Problem 1: Pricing an Arithmetic Asian Option

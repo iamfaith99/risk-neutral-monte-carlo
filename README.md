@@ -36,6 +36,15 @@ All Python dependencies are managed through Poetry and include:
 - SciPy
 - Jupyter
 
+## Code Quality
+
+The project follows strict code quality guidelines:
+- No unused imports or dependencies
+- Organized imports (standard library first, third-party second)
+- Pure functions with no side effects
+- Clear separation of concerns
+- Explicit dependencies
+
 ## Setup
 
 ### Installing Dependencies
@@ -47,45 +56,38 @@ poetry install
 
 ## Usage
 
-### Rendering the Document
-
-To render the Quarto document to HTML:
+To use this project, follow these steps:
 
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/risk-neutral-monte-carlo.git
+cd risk-neutral-monte-carlo
+
+# Install dependencies with Poetry
+poetry install
+
+# Render the Quarto document to HTML
 make render
-```
 
-### Viewing the Document
-
-To open the rendered HTML file in your default browser:
-
-```bash
+# View the rendered HTML file in your browser
 make view
-```
 
-### Running the Project
-
-To run the project as a Python module:
-
-```bash
+# Execute the Python code in the Quarto document
 make run
-```
 
-### Cleaning Generated Files
-
-To clean up generated files:
-
-```bash
+# Clean generated files
 make clean
 ```
 
-### Getting Help
+## Makefile Commands
 
-For a list of available commands:
+The project includes a Makefile with the following targets:
 
-```bash
-make help
-```
+- `make render`: Renders the Quarto document to HTML using Poetry
+- `make view`: Opens the rendered HTML file in the default browser
+- `make run`: Executes the Python code in the Quarto document using Poetry's environment
+- `make clean`: Removes generated files
+- `make help`: Lists available commands
 
 ## Implementation Details
 
