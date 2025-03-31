@@ -36,6 +36,9 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+
+# Set a fixed random seed for reproducibility
+np.random.seed(42)
 ```
 
 # Problem 1: Pricing an Arithmetic Asian Option
