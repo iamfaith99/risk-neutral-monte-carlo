@@ -115,24 +115,27 @@ def generate_gbm_paths(
     paths = np.zeros((n_paths, n_steps + 1))
     paths[:, 0] = S0
     
-    # Generate random normal variables
     if antithetic:
         # For antithetic sampling, generate half the paths and then negate
         half_paths = n_paths // 2
+        
+        # Generate all random numbers at once
         Z = np.random.normal(0, 1, (half_paths, n_steps))
         
-        # First half of paths uses Z
-        for i in range(1, n_steps + 1):
-            paths[:half_paths, i] = paths[:half_paths, i-1] * np.exp(nudt + sigsdt * Z[:, i-1])
+        # Vectorized calculation for first half of paths
+        increments = np.exp(nudt + sigsdt * Z)
+        paths[:half_paths, 1:] = S0 * np.cumprod(increments, axis=1)
         
-        # Second half uses -Z (antithetic)
-        for i in range(1, n_steps + 1):
-            paths[half_paths:, i] = paths[half_paths:, i-1] * np.exp(nudt + sigsdt * (-Z[:, i-1]))
+        # Vectorized calculation for second half (antithetic)
+        anti_increments = np.exp(nudt + sigsdt * (-Z))
+        paths[half_paths:, 1:] = S0 * np.cumprod(anti_increments, axis=1)
     else:
-        # Standard path generation
-        for i in range(1, n_steps + 1):
-            Z = np.random.normal(0, 1, n_paths)
-            paths[:, i] = paths[:, i-1] * np.exp(nudt + sigsdt * Z)
+        # Generate all random numbers at once
+        Z = np.random.normal(0, 1, (n_paths, n_steps))
+        
+        # Vectorized calculation for all paths
+        increments = np.exp(nudt + sigsdt * Z)
+        paths[:, 1:] = S0 * np.cumprod(increments, axis=1)
     
     return paths
 ```
@@ -261,13 +264,13 @@ def arithmetic_asian_call_mc(
     # Calculate payoffs
     payoffs = np.maximum(arithmetic_avg - K, 0)
     
+    discount_factor = np.exp(-r * T)
+    
     # Apply control variate if requested
     if control_variate:
-        # Calculate geometric averages
+        # Calculate geometric averages vectorized
         # For numerical stability, we take the log first
-        log_paths = np.log(paths[:, 1:])
-        log_geometric_avg = np.mean(log_paths, axis=1)
-        geometric_avg = np.exp(log_geometric_avg)
+        geometric_avg = np.exp(np.mean(np.log(paths[:, 1:]), axis=1))
         
         # Calculate geometric payoffs
         geometric_payoffs = np.maximum(geometric_avg - K, 0)
@@ -275,21 +278,26 @@ def arithmetic_asian_call_mc(
         # Get analytical price for geometric Asian option
         geo_price = geometric_asian_call_price(S0, K, r, sigma, T, delta, n_steps)
         
-        # Calculate optimal control variate parameter (using first 10% of paths as pilot)
+        # Calculate optimal control variate parameter using vectorized operations
+        # Use a subset of paths as pilot
         pilot_size = max(1000, n_paths // 10)
-        cov_matrix = np.cov(payoffs[:pilot_size], geometric_payoffs[:pilot_size])
+        pilot_payoffs = payoffs[:pilot_size]
+        pilot_geo_payoffs = geometric_payoffs[:pilot_size]
+        
+        # Vectorized covariance calculation
+        cov_matrix = np.cov(pilot_payoffs, pilot_geo_payoffs)
         beta = -cov_matrix[0, 1] / cov_matrix[1, 1]
         
-        # Apply control variate adjustment
-        adjusted_payoffs = payoffs + beta * (geometric_payoffs - np.exp(-r * T) * geo_price)
+        # Apply control variate adjustment vectorized
+        adjusted_payoffs = payoffs + beta * (geometric_payoffs - discount_factor * geo_price)
         
         # Calculate price and standard error
-        price = np.exp(-r * T) * np.mean(adjusted_payoffs)
-        std_err = np.exp(-r * T) * np.std(adjusted_payoffs, ddof=1) / np.sqrt(n_paths)
+        price = discount_factor * np.mean(adjusted_payoffs)
+        std_err = discount_factor * np.std(adjusted_payoffs, ddof=1) / np.sqrt(n_paths)
     else:
-        # Standard Monte Carlo
-        price = np.exp(-r * T) * np.mean(payoffs)
-        std_err = np.exp(-r * T) * np.std(payoffs, ddof=1) / np.sqrt(n_paths)
+        # Standard Monte Carlo with vectorized operations
+        price = discount_factor * np.mean(payoffs)
+        std_err = discount_factor * np.std(payoffs, ddof=1) / np.sqrt(n_paths)
     
     computation_time = time.time() - start_time
     
@@ -433,52 +441,53 @@ def generate_sv_paths(
     
     if antithetic:
         half_paths = n_paths // 2
+        
+        # Generate all random numbers at once
         Z1 = np.random.normal(0, 1, (half_paths, n_steps))
         Z2 = np.random.normal(0, 1, (half_paths, n_steps))
         
-        # First half of paths
+        # Process paths iteratively but with vectorized operations
+        # We can't fully vectorize due to path dependency in variance
         for i in range(1, n_steps + 1):
+            # First half of paths
             # Ensure variance stays positive
-            V_paths[:half_paths, i-1] = np.maximum(V_paths[:half_paths, i-1], 1e-6)
+            V_curr = np.maximum(V_paths[:half_paths, i-1], 1e-6)
             
             # Update variance
-            dV = alpha * (V_bar - V_paths[:half_paths, i-1]) * dt + \
-                 xi * np.sqrt(V_paths[:half_paths, i-1] * dt) * Z2[:, i-1]
-            V_paths[:half_paths, i] = V_paths[:half_paths, i-1] + dV
+            dV = alpha * (V_bar - V_curr) * dt + xi * np.sqrt(V_curr * dt) * Z2[:, i-1]
+            V_paths[:half_paths, i] = V_curr + dV
             
             # Update asset price
-            dS = (r - delta) * dt + np.sqrt(V_paths[:half_paths, i-1] * dt) * Z1[:, i-1]
+            dS = (r - delta) * dt + np.sqrt(V_curr * dt) * Z1[:, i-1]
             S_paths[:half_paths, i] = S_paths[:half_paths, i-1] * np.exp(dS)
-        
-        # Second half of paths (antithetic)
-        for i in range(1, n_steps + 1):
+            
+            # Second half of paths (antithetic)
             # Ensure variance stays positive
-            V_paths[half_paths:, i-1] = np.maximum(V_paths[half_paths:, i-1], 1e-6)
+            V_curr = np.maximum(V_paths[half_paths:, i-1], 1e-6)
             
             # Update variance (using -Z2)
-            dV = alpha * (V_bar - V_paths[half_paths:, i-1]) * dt + \
-                 xi * np.sqrt(V_paths[half_paths:, i-1] * dt) * (-Z2[:, i-1])
-            V_paths[half_paths:, i] = V_paths[half_paths:, i-1] + dV
+            dV = alpha * (V_bar - V_curr) * dt + xi * np.sqrt(V_curr * dt) * (-Z2[:, i-1])
+            V_paths[half_paths:, i] = V_curr + dV
             
             # Update asset price (using -Z1)
-            dS = (r - delta) * dt + np.sqrt(V_paths[half_paths:, i-1] * dt) * (-Z1[:, i-1])
+            dS = (r - delta) * dt + np.sqrt(V_curr * dt) * (-Z1[:, i-1])
             S_paths[half_paths:, i] = S_paths[half_paths:, i-1] * np.exp(dS)
     else:
+        # Generate all random numbers at once
+        Z1 = np.random.normal(0, 1, (n_paths, n_steps))
+        Z2 = np.random.normal(0, 1, (n_paths, n_steps))
+        
+        # Process paths iteratively but with vectorized operations
         for i in range(1, n_steps + 1):
-            # Generate random numbers
-            Z1 = np.random.normal(0, 1, n_paths)
-            Z2 = np.random.normal(0, 1, n_paths)
-            
             # Ensure variance stays positive
-            V_paths[:, i-1] = np.maximum(V_paths[:, i-1], 1e-6)
+            V_curr = np.maximum(V_paths[:, i-1], 1e-6)
             
             # Update variance
-            dV = alpha * (V_bar - V_paths[:, i-1]) * dt + \
-                 xi * np.sqrt(V_paths[:, i-1] * dt) * Z2
-            V_paths[:, i] = V_paths[:, i-1] + dV
+            dV = alpha * (V_bar - V_curr) * dt + xi * np.sqrt(V_curr * dt) * Z2[:, i-1]
+            V_paths[:, i] = V_curr + dV
             
             # Update asset price
-            dS = (r - delta) * dt + np.sqrt(V_paths[:, i-1] * dt) * Z1
+            dS = (r - delta) * dt + np.sqrt(V_curr * dt) * Z1[:, i-1]
             S_paths[:, i] = S_paths[:, i-1] * np.exp(dS)
     
     return S_paths, V_paths
@@ -615,26 +624,31 @@ def lookback_call_mc(
         S0, V0, r, delta, alpha, V_bar, xi, T, n_steps, n_paths, antithetic
     )
     
-    # Calculate maximum price for each path
+    # Calculate maximum price for each path (vectorized)
     max_prices = np.max(S_paths, axis=1)
     
-    # Calculate payoffs
+    # Calculate payoffs (vectorized)
     payoffs = np.maximum(max_prices - K, 0)
+    
+    # Pre-compute discount factor
+    discount_factor = np.exp(-r * T)
     
     if control_variate:
         # For control variate, we'll use the continuous fixing lookback option
         # with constant volatility (average volatility over the path)
         
-        # Generate GBM paths with constant volatility for control
+        # Calculate average volatility (vectorized)
         avg_sigma = np.sqrt(np.mean(V_paths))
+        
+        # Generate GBM paths with constant volatility for control
         control_paths = generate_gbm_paths(
             S0, r, avg_sigma, T, delta, n_steps, n_paths, antithetic
         )
         
-        # Calculate maximum price for control paths
+        # Calculate maximum price for control paths (vectorized)
         control_max_prices = np.max(control_paths, axis=1)
         
-        # Calculate control payoffs
+        # Calculate control payoffs (vectorized)
         control_payoffs = np.maximum(control_max_prices - K, 0)
         
         # Get analytical price for continuous lookback
@@ -642,21 +656,26 @@ def lookback_call_mc(
             S0, K, r, avg_sigma, T, delta
         )
         
-        # Calculate optimal control variate parameter (using first 10% of paths as pilot)
+        # Calculate optimal control variate parameter using vectorized operations
+        # Use a subset of paths as pilot
         pilot_size = max(1000, n_paths // 10)
-        cov_matrix = np.cov(payoffs[:pilot_size], control_payoffs[:pilot_size])
+        pilot_payoffs = payoffs[:pilot_size]
+        pilot_control_payoffs = control_payoffs[:pilot_size]
+        
+        # Vectorized covariance calculation
+        cov_matrix = np.cov(pilot_payoffs, pilot_control_payoffs)
         beta = -cov_matrix[0, 1] / cov_matrix[1, 1]
         
-        # Apply control variate adjustment
-        adjusted_payoffs = payoffs + beta * (control_payoffs - np.exp(-r * T) * control_price)
+        # Apply control variate adjustment (vectorized)
+        adjusted_payoffs = payoffs + beta * (control_payoffs - discount_factor * control_price)
         
-        # Calculate price and standard error
-        price = np.exp(-r * T) * np.mean(adjusted_payoffs)
-        std_err = np.exp(-r * T) * np.std(adjusted_payoffs, ddof=1) / np.sqrt(n_paths)
+        # Calculate price and standard error (vectorized)
+        price = discount_factor * np.mean(adjusted_payoffs)
+        std_err = discount_factor * np.std(adjusted_payoffs, ddof=1) / np.sqrt(n_paths)
     else:
-        # Standard Monte Carlo
-        price = np.exp(-r * T) * np.mean(payoffs)
-        std_err = np.exp(-r * T) * np.std(payoffs, ddof=1) / np.sqrt(n_paths)
+        # Standard Monte Carlo with vectorized operations
+        price = discount_factor * np.mean(payoffs)
+        std_err = discount_factor * np.std(payoffs, ddof=1) / np.sqrt(n_paths)
     
     computation_time = time.time() - start_time
     
