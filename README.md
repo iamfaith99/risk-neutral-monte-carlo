@@ -25,16 +25,27 @@ The goal is to analyze the trade-off between computation time and variance reduc
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.13+
 - Poetry (for dependency management)
 - Quarto
 
 All Python dependencies are managed through Poetry and include:
-- NumPy
-- Pandas
-- Matplotlib
-- SciPy
-- Jupyter
+- Jupyter (>=1.1.1)
+- Matplotlib (>=3.10.1)
+- NumPy (>=2.2.4)
+- Pandas (>=2.2.3)
+- PyYAML (>=6.0.2)
+- SciPy (>=1.15.2)
+
+## Code Quality
+
+The project follows strict code quality guidelines:
+- No unused imports or dependencies
+- Organized imports (standard library first, third-party second)
+- Pure functions with no side effects
+- Clear separation of concerns
+- Explicit dependencies
+- Vectorized operations for optimal performance
 
 ## Setup
 
@@ -87,6 +98,7 @@ The implementation follows functional programming principles:
 - Immutable data structures where possible
 - Clear separation of concerns
 - Explicit dependencies
+- Vectorized operations for performance
 
 The Monte Carlo simulations use various variance reduction techniques to improve efficiency:
 - **Antithetic Sampling**: Generates negatively correlated pairs of paths to reduce variance
@@ -99,4 +111,6 @@ The project includes a detailed analysis of the performance of each variance red
 - Option price estimate
 - Standard error
 - Computation time
-- Efficiency (variance reduction per unit of computation time)
+- Relative efficiency
+
+The vectorized implementation provides significant performance improvements while maintaining the same mathematical accuracy.
