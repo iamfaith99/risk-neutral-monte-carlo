@@ -1,6 +1,6 @@
 # Risk-Neutral Monte Carlo Pricing
 
-This repository contains a high-performance computational finance project implementing risk-neutral Monte Carlo pricing for exotic options with variance reduction techniques. The project is structured according to functional programming principles, with pure functions, immutable data structures, and clear separation of concerns.
+This repository contains a computational finance project implementing risk-neutral Monte Carlo pricing for exotic options with variance reduction techniques. The project is structured according to functional programming principles, with pure functions, immutable data structures, and clear separation of concerns.
 
 ## Project Overview
 
@@ -17,25 +17,20 @@ For each option, we implement and compare four simulation approaches:
 
 The goal is to analyze the trade-off between computation time and variance reduction for each technique.
 
-## High-Performance Implementation with JAX
+## Implementation Features
 
-This project showcases advanced functional programming skills through a dual implementation:
+This project showcases advanced functional programming skills through:
 
-1. **NumPy Implementation** (`final_project.qmd`): Traditional vectorized implementation using NumPy
-2. **JAX Implementation** (`final_project_jax.qmd`): High-performance implementation using JAX with:
-   - JIT compilation for accelerated computation
-   - Vectorized operations using JAX's immutable arrays
-   - Functional design with pure functions and no side effects
-   - XLA (Accelerated Linear Algebra) integration
-
-The JAX implementation demonstrates significant performance improvements while maintaining the same mathematical accuracy, particularly for the variance reduction techniques.
+- Vectorized operations using NumPy for high performance
+- Functional design with pure functions and no side effects
+- Immutable data structures where possible
+- Clear separation of concerns
+- Comprehensive documentation with detailed explanations
 
 ## Project Structure
 
-- `final_project.qmd`: Quarto document containing the NumPy implementation, analysis, and results
-- `final_project_jax.qmd`: Quarto document containing the JAX implementation with performance analysis
-- `benchmark_jax.py`: Comprehensive benchmarking script comparing NumPy and JAX implementations
-- `Makefile`: Contains commands for rendering both documents and other project tasks
+- `final_project.qmd`: Quarto document containing the implementation, analysis, and results
+- `Makefile`: Contains commands for rendering the document and other project tasks
 - `pyproject.toml` & `poetry.lock`: Poetry configuration for dependency management
 - `.gitignore`: Configuration for excluding generated files from version control
 
@@ -49,46 +44,30 @@ All Python dependencies are managed through Poetry and include:
 - Jupyter (>=1.1.1)
 - Matplotlib (>=3.10.1)
 - NumPy (>=2.2.4)
-- JAX (>=0.5.3)
 - Pandas (>=2.2.3)
 - PyYAML (>=6.0.2)
 - SciPy (>=1.15.2)
-- JAX (>=0.4.26)
-- JAXlib (>=0.4.26)
 
 ## Advanced Features
 
-### Option Greeks Calculation
+### Variance Reduction Techniques
 
-The JAX implementation leverages automatic differentiation to compute option Greeks with high precision:
+The project implements several variance reduction techniques to improve the efficiency of Monte Carlo simulations:
 
-- **Delta (∂V/∂S)**: Sensitivity of option price to changes in the underlying asset price
-- **Gamma (∂²V/∂S²)**: Rate of change of Delta with respect to the underlying asset price
-- **Vega (∂V/∂σ)**: Sensitivity of option price to changes in volatility
+- **Antithetic Sampling**: Generates negatively correlated pairs of paths to reduce variance. This is particularly effective for monotonic payoff functions like those in option pricing.
 
-These Greeks are computed automatically through JAX's differentiation system rather than using finite difference approximations, resulting in more accurate and efficient calculations.
+- **Control Variate**: Uses analytical solutions for related options (geometric Asian option and continuous lookback option) as control variates. This significantly reduces variance when the control variate is highly correlated with the target.
 
-### Performance Benchmarking
+- **Combined Approach**: Applies both techniques together for maximum variance reduction, demonstrating how complementary techniques can be combined for optimal results.
 
-The project includes comprehensive benchmarking comparing the NumPy and JAX implementations:
+### Stochastic Volatility Model
 
-```bash
-# Run the benchmarking script
-poetry run python benchmark_jax.py
-```
+The project implements a sophisticated stochastic volatility model for the lookback option, featuring:
 
-This generates performance metrics and visualizations showing:
-- Execution time comparison between NumPy and JAX implementations
-- Speedup factors across different numbers of simulation paths
-- Scaling properties with large numbers of paths (up to millions)
-
-The benchmarking script demonstrates significant performance advantages of JAX:
-- 5.13x faster for 1,000 paths
-- 11.12x faster for 10,000 paths
-- 65.75x faster for 100,000 paths
-- Efficient handling of 1,000,000 paths
-
-These results highlight JAX's excellent scaling properties for large-scale simulations, making it ideal for computationally intensive financial modeling tasks.
+- Heston-style mean-reverting variance process
+- Milstein discretization scheme for improved accuracy
+- Correlation between asset price and variance processes (leverage effect)
+- Efficient tracking of running maximum prices for lookback options
 
 ## Setup
 
@@ -114,15 +93,14 @@ poetry install
 # Set up the Jupyter kernel
 make setup-kernel
 
-# Render both Quarto documents (NumPy and JAX implementations)
-make render-all
+# Render the Quarto document
+make render
 
-# View the rendered HTML files in your browser
-make view QUARTO_FILE=final_project.qmd
-make view QUARTO_FILE=final_project_jax.qmd
+# View the rendered HTML file in your browser
+make view
 
-# Execute both implementations
-make run-all
+# Execute the implementation
+make run
 
 # Clean generated files
 make clean
@@ -133,14 +111,9 @@ make clean
 The project includes a Makefile with the following targets:
 
 - `make setup-kernel`: Sets up a Jupyter kernel using Poetry's virtual environment
-- `make render`: Renders the default Quarto document (final_project.qmd)
-- `make render QUARTO_FILE=file.qmd`: Renders a specific Quarto document
-- `make render-all`: Renders all Quarto documents (both NumPy and JAX implementations)
-- `make view`: Opens the default rendered HTML in your default browser
-- `make view QUARTO_FILE=file.qmd`: Opens a specific rendered HTML
-- `make run`: Executes the default Quarto document using Poetry's environment
-- `make run QUARTO_FILE=file.qmd`: Executes a specific Quarto document
-- `make run-all`: Executes all Quarto documents
+- `make render`: Renders the Quarto document
+- `make view`: Opens the rendered HTML in your default browser
+- `make run`: Executes the Quarto document using Poetry's environment
 - `make clean`: Removes all generated files
 - `make help`: Lists available commands
 
@@ -158,26 +131,34 @@ The Monte Carlo simulations use various variance reduction techniques to improve
 - **Control Variate**: Uses analytical solutions for related options as control variates
 - **Combined Approach**: Applies both techniques together for maximum variance reduction
 
-### JAX-Specific Optimizations
+### NumPy Optimizations
 
-The JAX implementation includes several advanced optimizations:
+The implementation includes several optimizations for performance:
 
-1. **JIT Compilation**: All core functions are decorated with `@jax.jit` for just-in-time compilation
-2. **Functional Updates**: Uses JAX's immutable arrays with functional updates (e.g., `array.at[idx].set(value)`)
-3. **Pure Random Number Generation**: Employs JAX's key-splitting approach for reproducible randomness
-4. **Automatic Vectorization**: Leverages JAX's `vmap` for efficient vectorization across paths
-5. **XLA Integration**: Benefits from XLA's optimizations for numerical computations
+1. **Vectorized Operations**: Uses NumPy's vectorized operations to avoid explicit loops
+2. **Pre-computed Constants**: Calculates constants outside of loops for efficiency
+3. **Efficient Random Number Generation**: Generates all random numbers at once
+4. **Numerical Stability**: Uses logarithmic transformations for better numerical stability
+5. **Pilot Sampling**: Uses a subset of paths to estimate optimal control variate parameters
 
 ## Results
 
 The project includes a detailed analysis of the performance of each variance reduction technique in terms of:
 - Option price estimate
-- Standard error
-- Computation time
-- Relative efficiency
+- Standard error with reduction percentages
+- Computation time with relative factors
+- Efficiency gain metrics
 
-The JAX implementation demonstrates substantial performance improvements:
-- Up to 65x speedup compared to the NumPy implementation (as measured by the benchmarking script)
-- Ability to handle millions of simulation paths efficiently
-- Precise computation of option Greeks through automatic differentiation
-- Excellent scaling properties for large-scale simulations
+The enhanced results presentation features:
+- Visual indicators (↑/↓) to highlight improvements and deteriorations
+- Color-coding (green for improvements, red for deteriorations)
+- Normalized metrics for easy comparison
+- Consistent decimal precision across all metrics
+- Clear section headers and structured organization
+
+The analysis demonstrates:
+- Significant variance reduction from control variate techniques (up to 97.4% for Asian options)
+- Modest computational overhead for variance reduction methods
+- Substantial efficiency improvements when combining techniques (up to 2134.5× for Asian options)
+- Different effectiveness by option type (control variates highly effective for Asian options but less so for lookback options with stochastic volatility)
+- Trade-offs between computation time and estimation accuracy
