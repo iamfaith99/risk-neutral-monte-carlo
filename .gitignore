@@ -1,6 +1,7 @@
 # Generated files
 *.html
 *.ipynb
+!final_project.ipynb
 *_files/
 _freeze/
 
