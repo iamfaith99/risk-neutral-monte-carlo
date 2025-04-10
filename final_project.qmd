@@ -28,28 +28,12 @@ For each option, we implement and compare four simulation approaches:
 The goal is to analyze the trade-off between computation time and variance reduction for each technique.
 
 ```{python}
-# Standard library imports - fundamental Python modules that don't require installation
-import time         # For measuring computation time of different algorithms (performance benchmarking)
-from typing import Tuple  # For type annotations to enhance code readability and enable static type checking
-
-# Third-party imports - specialized libraries for scientific computing and data analysis
-import numpy as np  # Core numerical computing library for vectorized operations on arrays
-                    # Used for efficient mathematical operations on large datasets
-                    # Provides the foundation for our Monte Carlo simulations
-
-import pandas as pd  # Data manipulation library used for organizing and displaying results
-                     # Provides DataFrame objects for tabular data representation
-                     # Used only for final results presentation, not in core calculations
-
-from scipy.stats import norm  # Statistical functions from SciPy
-                              # norm.cdf provides the cumulative distribution function of the standard normal distribution
-                              # Essential for analytical option pricing formulas (Black-Scholes and variants)
-
-# Set a fixed random seed for reproducibility
-# This ensures that random number sequences are identical across multiple runs
-# Critical for debugging and comparing different algorithms fairly
-# The value 42 is arbitrary but conventionally used (reference to "The Hitchhiker's Guide to the Galaxy")
-np.random.seed(42)  # Controls NumPy's random number generator only
+import time 
+from typing import Tuple 
+import numpy as np  
+import pandas as pd  
+from scipy.stats import norm  
+np.random.seed(42)
 ```
 
 # Problem 1: Pricing an Arithmetic Asian Option
@@ -603,7 +587,6 @@ def generate_sv_paths(
                 dW2 = -Z2_corr[:, i-1] * sqrt_dt  # Negate the Wiener process increment
                 
                 # Same Milstein formula but with negated random numbers
-                # Calculate each term separately for clarity and to avoid syntax errors
                 drift_term = alpha * (V_bar - V_curr) * dt  # Drift term (unchanged)
                 diffusion_term = xi * np.sqrt(V_curr) * dW2  # Diffusion with negated random numbers
                 correction_term = 0.25 * xi**2 * (dW2**2 - dt)  # Second-order term (note: dW2^2 is unchanged)
@@ -648,7 +631,6 @@ def generate_sv_paths(
                 dW2 = Z2_corr[:, i-1] * sqrt_dt  # Wiener process increment
                 
                 # Milstein discretization of the Heston variance process
-                # Calculate each term separately for clarity and to avoid syntax errors
                 drift_term = alpha * (V_bar - V_curr) * dt  # Mean reversion drift term
                 diffusion_term = xi * np.sqrt(V_curr) * dW2  # Diffusion term
                 correction_term = 0.25 * xi**2 * (dW2**2 - dt)  # Second-order Itô-Taylor expansion term
@@ -675,10 +657,6 @@ def generate_sv_paths(
             # Update running maximum for lookback option pricing
             S_max_paths[:, i] = np.maximum(S_max_paths[:, i-1], S_paths[:, i])
     
-    # Return the generated paths as a tuple (immutable data structure)
-    # S_paths: Asset price paths of shape (n_paths, n_steps+1)
-    # V_paths: Variance paths of shape (n_paths, n_steps+1)
-    # S_max_paths: Running maximum price paths of shape (n_paths, n_steps+1)
     # Return a tuple of three arrays (immutable, following functional programming principles):
     # 1. S_paths: Asset price paths - shape (n_paths, n_steps+1)
     # 2. V_paths: Variance paths - shape (n_paths, n_steps+1)
