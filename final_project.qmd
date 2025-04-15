@@ -532,8 +532,7 @@ def generate_sv_paths(
             # If no correlation, use Z2 as is
             Z2_corr = Z2
         
-        # Process paths iteratively but with vectorized operations for performance
-        # We can't fully vectorize across time steps due to path dependency
+        # Process paths iteratively
         for i in range(1, n_steps + 1):
             #----- First half of paths (standard random numbers) -----#
             # Ensure variance stays positive (avoid numerical issues)
@@ -546,7 +545,6 @@ def generate_sv_paths(
                 
                 # Milstein scheme adds a second-order term to better approximate the SDE
                 # dV_t = α(V_bar - V_t)dt + ξ√V_t dW_t
-                # Calculate each term separately for clarity and to avoid syntax errors
                 drift_term = alpha * (V_bar - V_curr) * dt  # Drift term (mean reversion)
                 diffusion_term = xi * np.sqrt(V_curr) * dW2  # Diffusion term
                 correction_term = 0.25 * xi**2 * (dW2**2 - dt)  # Second-order correction term
@@ -562,7 +560,6 @@ def generate_sv_paths(
             dW1 = Z1[:, i-1] * sqrt_dt  # Wiener process increment for asset price
             
             # Log-return for the asset price (Itô's formula applied to log-price)
-            # Calculate terms separately to avoid syntax errors
             drift_term = (r - delta - 0.5 * V_curr) * dt  # Risk-neutral drift with Itô correction
             volatility_term = np.sqrt(V_curr) * dW1  # Stochastic term with stochastic volatility
             dS = drift_term + volatility_term
