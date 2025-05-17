@@ -529,7 +529,7 @@ def generate_sv_paths(
         
         # Apply correlation between asset price and variance processes (leverage effect)
         if rho != 0:  # Only apply correlation if rho is non-zero
-            # Cholesky decomposition for 2D correlated normal variables
+            # Create correlated normals using rho
             # This transforms Z2 to be correlated with Z1 with correlation coefficient rho
             Z2_corr = rho * Z1 + np.sqrt(1 - rho**2) * Z2
         else:
@@ -615,7 +615,7 @@ def generate_sv_paths(
         
         # Apply correlation between asset price and variance processes
         if rho != 0:  # Only if correlation is non-zero
-            # Cholesky decomposition for 2D correlated normal variables
+            # Create correlated normals using rho
             Z2_corr = rho * Z1 + np.sqrt(1 - rho**2) * Z2
         else:
             # No correlation adjustment needed
