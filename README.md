@@ -36,7 +36,7 @@ This project showcases advanced functional programming skills through:
 
 ## Requirements
 
-- Python 3.13+
+- Python 3.10+
 - Poetry (for dependency management)
 - Quarto
 

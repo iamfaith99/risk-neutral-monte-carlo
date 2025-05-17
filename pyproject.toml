@@ -6,7 +6,7 @@ authors = [
     {name = "Weldon T Antoine III",email = "weldon.coder@tuta.io"}
 ]
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "numpy (>=2.2.4,<3.0.0)",
     "matplotlib (>=3.10.1,<4.0.0)",
