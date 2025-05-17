@@ -95,6 +95,8 @@ def generate_gbm_paths(
     
     # Branch based on whether antithetic sampling is used for variance reduction
     if antithetic:
+        if n_paths % 2 != 0:
+            raise ValueError("n_paths must be even when antithetic sampling is enabled")
         # With antithetic sampling, we generate half the paths and use negated random numbers for the other half
         # This creates negatively correlated paths that reduce the overall variance of the estimator
         half_paths = n_paths // 2  # Integer division to get half the number of paths
@@ -515,6 +517,8 @@ def generate_sv_paths(
     
     # Branch based on whether antithetic sampling is used for variance reduction
     if antithetic:
+        if n_paths % 2 != 0:
+            raise ValueError("n_paths must be even when antithetic sampling is enabled")
         # With antithetic sampling, we generate half the paths and negate the random numbers for the other half
         half_paths = n_paths // 2  # Calculate half the number of paths (integer division)
         
