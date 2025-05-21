@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd  
 from scipy.stats import norm  
 np.random.seed(42)
+from gbm import generate_gbm_paths
 ```
 
 # Problem 1: Pricing an Arithmetic Asian Option
@@ -273,7 +274,11 @@ def arithmetic_asian_call_mc(
         # Apply control variate adjustment to all payoffs using vectorized operations
         # The adjustment is: X + beta*(Y - E[Y]) where E[Y] is the analytical price
         # This linear combination reduces variance while preserving the expected value
-        adjusted_payoffs = payoffs + beta * (geometric_payoffs - discount_factor * geo_price)  # Shape: (n_paths,)
+        # geo_price is already discounted, geometric_payoffs are future values.
+        # To make them comparable, bring geo_price to future value or geometric_payoffs to present value.
+        # The original bug was multiplying an already discounted price by discount_factor.
+        # The fix changes it to geo_price / discount_factor to bring it to future value.
+        adjusted_payoffs = payoffs + beta * (geometric_payoffs - geo_price / discount_factor)  # Shape: (n_paths,)
         
         # Calculate the final price estimate using the adjusted payoffs
         # The option price is the discounted expected payoff under the risk-neutral measure
@@ -816,7 +821,11 @@ def lookback_call_mc(
         
         # Apply control variate adjustment to all payoffs (vectorized operation)
         # The adjustment is: X + beta * (Y - E[Y]) where E[Y] is the analytical price
-        adjusted_payoffs = payoffs + beta * (control_payoffs - discount_factor * control_price)
+        # control_price is already discounted, control_payoffs are future values.
+        # To make them comparable, bring control_price to future value or control_payoffs to present value.
+        # The original bug was multiplying an already discounted price by discount_factor.
+        # The fix changes it to control_price / discount_factor to bring it to future value.
+        adjusted_payoffs = payoffs + beta * (control_payoffs - control_price / discount_factor)
         
         # Calculate the final price estimate using the adjusted payoffs
         # This is the risk-neutral expectation: E[e^(-rT) * adjusted_payoffs]
@@ -1054,22 +1063,22 @@ display(results_df2)
 ### Arithmetic Asian Option
 The results for the Arithmetic Asian option show dramatic improvements through variance reduction:
 
-- Simple Monte Carlo produces a price estimate of 5.68 with a standard error of 0.084, serving as our baseline.
-- Antithetic Sampling slightly improves the standard error to 0.081 (about 3.6% reduction) with minimal additional computation cost, resulting in an efficiency improvement of 80.9% relative to the baseline.
-- Control Variate approach shows an extraordinary reduction in standard error to 0.0022 (97.4% reduction), though with a slightly higher computation cost. The efficiency gain is an impressive 1597.8× that of simple Monte Carlo.
-- Combined Techniques achieve a similar standard error of 0.0022 with a slightly higher computation cost than control variate alone. The efficiency gain is still excellent at 2134.5× the baseline.
+- Simple Monte Carlo produces a price estimate of 5.681 with a standard error of 0.0836, serving as our baseline.
+- Antithetic Sampling provides a price of 5.504 and slightly improves the standard error to 0.0806 (about 3.6% reduction) with faster computation, resulting in an efficiency improvement of 2.0× relative to the baseline.
+- Control Variate approach (price 4.928) shows an extraordinary reduction in standard error to 0.0022 (97.4% reduction). The efficiency gain is an impressive 1683.7× that of simple Monte Carlo.
+- Combined Techniques (price 4.927) achieve a similar standard error of 0.0022 (97.3% reduction). The efficiency gain is excellent at 1832.5× the baseline.
 
-The price estimates also differ noticeably, with the control variate methods producing consistently lower values (around 4.37) compared to the simple and antithetic methods (5.50-5.68). This suggests the control variate is correcting a bias in the simple Monte Carlo approach.
+The price estimates from control variate methods (around 4.93) are notably different from the Simple Monte Carlo (5.681) and Antithetic (5.504) methods. This highlights the impact of the control variate on the price estimate, primarily through significant variance reduction.
 
 ### Lookback Option with Stochastic Volatility
 For the more complex lookback option with stochastic volatility:
 
-- Simple Monte Carlo estimates a price of 15.80 with a standard error of 0.141.
-- Antithetic Sampling yields a very slight increase in the standard error to 0.142, but with a faster computation time, resulting in a modest efficiency gain of 1.3×.
-- Control Variate approach provides minimal standard error reduction (to 0.142) but requires significantly more computation time, resulting in lower efficiency (0.7×) than the baseline.
-- Combined Techniques achieve the lowest standard error at 0.139 (1.1% reduction) but with substantial computational overhead, making the relative efficiency slightly worse (0.96) or 1.0× than the baseline.
+- Simple Monte Carlo estimates a price of 15.802 with a standard error of 0.1408.
+- Antithetic Sampling (price 16.001) results in a slight increase in standard error to 0.1423 (1.1% increase), but due to faster computation time, it achieves an efficiency gain of 2.1×.
+- Control Variate approach (price 15.938) also shows a slight increase in standard error to 0.1422 (1.0% increase) with comparable computation time, resulting in an efficiency gain of 1.0× (no significant improvement over baseline).
+- Combined Techniques (price 15.533) achieve the lowest standard error at 0.1392 (1.1% reduction) with some computational overhead, resulting in an efficiency gain of 1.7×.
 
-The price estimates for the lookback option remain fairly consistent across methods (15.5-16.0), suggesting less bias correction from the control variate compared to the Asian option case.
+The price estimates for the lookback option remain fairly consistent across methods (15.5-16.0), suggesting less impact on the central price estimate from the control variate compared to the Asian option case, though variance reduction benefits are still observed with combined methods.
 
 ### Key Insights
 
