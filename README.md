@@ -30,9 +30,14 @@ This project showcases advanced functional programming skills through:
 ## Project Structure
 
 - `final_project.qmd`: Quarto document containing the implementation, analysis, and results
+- `gbm.py`: Module for generating Geometric Brownian Motion paths.
 - `Makefile`: Contains commands for rendering the document and other project tasks
 - `pyproject.toml` & `poetry.lock`: Poetry configuration for dependency management
 - `.gitignore`: Configuration for excluding generated files from version control
+- `tests/`: Directory containing test files.
+    - `tests/test_gbm.py`: Contains unit tests for the `gbm.py` module.
+    - `tests/notebook_helpers.py`: Contains helper functions extracted from `final_project.qmd` for testability.
+    - `tests/test_notebook_functions.py`: Contains tests for core financial functions defined in `final_project.qmd` and extracted into `notebook_helpers.py`.
 
 ## Requirements
 
@@ -114,8 +119,15 @@ The project includes a Makefile with the following targets:
 - `make render`: Renders the Quarto document
 - `make view`: Opens the rendered HTML in your default browser
 - `make run`: Executes the Quarto document using Poetry's environment
+- `make test`: Runs the pytest test suite (New).
 - `make clean`: Removes all generated files
 - `make help`: Lists available commands
+
+## Testing
+
+The project now includes expanded test coverage for both the GBM path generation (`gbm.py`) and the core financial functions from the notebook, utilizing pytest. Tests are located in the `tests/` directory and can be run using `poetry run pytest` or `make test`.
+
+A correction was made to the control variate calculation within the Monte Carlo pricing functions to ensure more accurate variance reduction.
 
 ## Implementation Details
 

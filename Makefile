@@ -14,15 +14,15 @@ all: render
 # Ensure Jupyter kernel is set up to use Poetry's virtual environment
 .PHONY: setup-kernel
 setup-kernel:
-	@echo "Setting up Jupyter kernel to use Poetry's virtual environment..."
-	$(POETRY) run python -m ipykernel install --user --name $(KERNEL_NAME) --display-name "Python ($(KERNEL_NAME))"
+	@echo "Setting up Jupyter kernel..."
+	python -m ipykernel install --user --name $(KERNEL_NAME) --display-name "Python ($(KERNEL_NAME))"
 	@echo "Kernel setup complete."
 
 # Render the Quarto document to HTML
 .PHONY: render
 render:
 	echo "Rendering $(QUARTO_FILE) to HTML..."
-	$(POETRY) run quarto render $(QUARTO_FILE)
+	quarto render $(QUARTO_FILE)
 	echo "Done! Output saved to $(QUARTO_FILE:.qmd=.html)"
 
 
@@ -37,8 +37,8 @@ view:
 .PHONY: run
 run: setup-kernel
 	echo "Converting $(QUARTO_FILE) to notebook and executing..."
-	$(POETRY) run quarto convert $(QUARTO_FILE) -o $(QUARTO_FILE:.qmd=.ipynb)
-	$(POETRY) run jupyter nbconvert --execute --inplace --ExecutePreprocessor.kernel_name=$(KERNEL_NAME) $(QUARTO_FILE:.qmd=.ipynb)
+	quarto convert $(QUARTO_FILE) -o $(QUARTO_FILE:.qmd=.ipynb)
+	jupyter nbconvert --execute --inplace --ExecutePreprocessor.kernel_name=$(KERNEL_NAME) $(QUARTO_FILE:.qmd=.ipynb)
 	echo "Done! Code execution complete."
 
 
